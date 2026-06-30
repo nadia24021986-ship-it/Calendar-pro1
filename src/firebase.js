@@ -1,20 +1,24 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
 
+// Konfigurasi Firebase milik Smart calendar pro1
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyAMx5Rk8r5mi207VOXv-0lXWSOwLFK6gBM",
+  authDomain: "smart-calendar-pro1.firebaseapp.com",
+  projectId: "smart-calendar-pro1",
+  storageBucket: "smart-calendar-pro1.firebasestorage.app",
+  messagingSenderId: "619060382509",
+  appId: "1:619060382509:web:68db1091373225a47421a4",
+  measurementId: "G-PKG2PXFV7V"
 };
 
+// Inisialisasi Firebase
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-signInAnonymously(auth)
-  .then(() => console.log("Berhasil masuk anonim!"))
-  .catch((error) => console.error("Gagal login anonim:", error));
+// Otomatis login anonim agar sinkron dengan fitur Authentication kamu
+signInAnonymously(auth).catch((error) => console.error("Auth Error:", error));
+
+export { db, auth };
