@@ -7,6 +7,7 @@ export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [firebaseError, setFirebaseError] = useState(null); // Detektor eror pelindung layar putih
   
   const [title, setTitle] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
@@ -14,15 +15,22 @@ export default function App() {
   const [category, setCategory] = useState('Kerja');
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('time', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const eventsData = [];
-      snapshot.forEach((doc) => {
-        eventsData.push({ id: doc.id, ...doc.data() });
+    try {
+      const q = query(collection(db, 'events'), orderBy('time', 'asc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const eventsData = [];
+        snapshot.forEach((doc) => {
+          eventsData.push({ id: doc.id, ...doc.data() });
+        });
+        setEvents(eventsData);
+      }, (error) => {
+        console.error("Firestore Error:", error);
+        setFirebaseError(error.message);
       });
-      setEvents(eventsData);
-    });
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (err) {
+      setFirebaseError(err.message);
+    }
   }, []);
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -51,7 +59,7 @@ export default function App() {
       setTime('');
       setShowModal(false);
     } catch (err) {
-      console.error("Error menambahkan kegiatan: ", err);
+      alert("Gagal menyimpan: " + err.message);
     }
   };
 
@@ -73,6 +81,13 @@ export default function App() {
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         
+        {/* Banner Notifikasi jika ada Eror Koneksi Firebase */}
+        {firebaseError && (
+          <div className="lg:col-span-3 bg-red-900/80 border border-red-500 text-red-200 p-3 rounded-xl text-xs">
+            <strong>⚠️ Info Sistem:</strong> {firebaseError}. (Pastikan Rules di Firebase Console sudah di-Publish ke 'true')
+          </div>
+        )}
+
         <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-4 shadow-xl border border-slate-700">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
