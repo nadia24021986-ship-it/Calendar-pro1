@@ -1,212 +1,270 @@
-import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
-import { collection, addDoc, onSnapshot, query, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2, Clock, Tag } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { db } from "./firebase";
+import { 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  deleteDoc, 
+  doc 
+} from "firebase/firestore";
 
-export default function App() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [events, setEvents] = useState([]);
+function App() {
+  const [tamuList, setTamuList] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterMess, setFilterMess] = useState("Semua Mess");
   const [showModal, setShowModal] = useState(false);
-  const [firebaseError, setFirebaseError] = useState(null); // Detektor eror pelindung layar putih
-  
-  const [title, setTitle] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
-  const [time, setTime] = useState('');
-  const [category, setCategory] = useState('Kerja');
 
+  // State Form Input Manual
+  const [namaTamu, setNamaTamu] = useState("");
+  const [tanggal, setTanggal] = useState("");
+  const [pagi, setPagi] = useState("");
+  const [siang, setSiang] = useState("");
+  const [malam, setMalam] = useState("");
+  const [mess, setMess] = useState("");
+  const [petugas, setPetugas] = useState("Suhendro");
+
+  // Ambil Data Otomatis dari Firebase Firestore
   useEffect(() => {
-    try {
-      const q = query(collection(db, 'events'), orderBy('time', 'asc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const eventsData = [];
-        snapshot.forEach((doc) => {
-          eventsData.push({ id: doc.id, ...doc.data() });
-        });
-        setEvents(eventsData);
-      }, (error) => {
-        console.error("Firestore Error:", error);
-        setFirebaseError(error.message);
-      });
-      return () => unsubscribe();
-    } catch (err) {
-      setFirebaseError(err.message);
-    }
+    const unsubscribe = onSnapshot(collection(db, "catering"), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTamuList(data);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
-  const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-  const daysOfWeek = ["Ming", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
-
-  const handleSubmit = async (e) => {
+  // Simpan Data Baru ke Firebase
+  const handleSimpanData = async (e) => {
     e.preventDefault();
-    if (!title || !selectedDate) return;
+    if (!namaTamu || !tanggal) {
+      alert("Nama Tamu dan Tanggal wajib diisi!");
+      return;
+    }
 
     try {
-      await addDoc(collection(db, 'events'), {
-        title,
-        date: selectedDate,
-        time: time || '00:00',
-        category
+      await addDoc(collection(db, "catering"), {
+        namaTamu,
+        tanggal,
+        pagi: pagi ? parseInt(pagi) : 0,
+        siang: siang ? parseInt(siang) : 0,
+        malam: malam ? parseInt(malam) : 0,
+        mess,
+        petugas,
+        createdAt: new Date().toISOString()
       });
-      setTitle('');
-      setTime('');
+
+      // Reset Form & Tutup Modal
+      setNamaTamu("");
+      setTanggal("");
+      setPagi("");
+      setSiang("");
+      setMalam("");
+      setMess("");
       setShowModal(false);
-    } catch (err) {
-      alert("Gagal menyimpan: " + err.message);
+    } catch (error) {
+      console.error("Gagal menyimpan data:", error);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("Hapus kegiatan ini?")) {
-      await deleteDoc(doc(db, 'events', id));
+  // Hapus Data
+  const handleHapusData = async (id) => {
+    if (window.confirm("Apakah Anda yakin ingin menghapus data ini?")) {
+      await deleteDoc(doc(db, "catering", id));
     }
   };
 
-  const calendarCells = [];
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    calendarCells.push(null);
-  }
-  for (let i = 1; i <= daysInMonth; i++) {
-    calendarCells.push(i);
-  }
+  // Filter Data Berdasarkan Pencarian dan Dropdown Mess
+  const filteredData = tamuList.filter((item) => {
+    const matchSearch = 
+      item.namaTamu?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.mess?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.petugas?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchMess = filterMess === "Semua Mess" || item.mess === filterMess;
+    
+    return matchSearch && matchMess;
+  });
+
+  // Hitung Total Ringkasan
+  const totalTamu = filteredData.length;
+  const totalMakanan = filteredData.reduce((acc, curr) => {
+    return acc + (curr.pagi || 0) + (curr.siang || 0) + (curr.malam || 0);
+  }, 0);
+
+  // Ambil daftar unik mess untuk pilihan dropdown filter
+  const daftarMessUnik = ["Semua Mess", ...new Set(tamuList.map(item => item.mess).filter(Boolean))];
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-4">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Banner Notifikasi jika ada Eror Koneksi Firebase */}
-        {firebaseError && (
-          <div className="lg:col-span-3 bg-red-900/80 border border-red-500 text-red-200 p-3 rounded-xl text-xs">
-            <strong>⚠️ Info Sistem:</strong> {firebaseError}. (Pastikan Rules di Firebase Console sudah di-Publish ke 'true')
+    <div className="min-h-screen bg-gray-100 font-sans text-gray-800">
+      {/* HEADER UTAMA */}
+      <header className="bg-[#00875A] text-white px-4 py-3 flex flex-wrap items-center justify-between shadow-md">
+        <div className="flex items-center space-x-2">
+          <span className="text-2xl">🍽️</span>
+          <div>
+            <h1 className="text-lg font-bold leading-tight">Catering Smart Calendar</h1>
+            <p className="text-xs text-green-100">Sistem Filter & AI Scheduler</p>
           </div>
-        )}
+        </div>
+        <div className="flex items-center space-x-3 mt-2 sm:mt-0">
+          <span className="bg-green-700 text-xs px-3 py-1.5 rounded-full flex items-center">
+            👤 Halo, {petugas}
+          </span>
+          <button 
+            onClick={() => setShowModal(true)}
+            className="bg-white text-[#00875A] text-xs font-semibold px-3 py-1.5 rounded shadow hover:bg-green-50"
+          >
+            + Tambah Manual
+          </button>
+          <button className="bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded shadow hover:bg-emerald-700">
+            🪄 Upload PDF / AI
+          </button>
+        </div>
+      </header>
 
-        <div className="lg:col-span-2 bg-slate-800 rounded-2xl p-4 shadow-xl border border-slate-700">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-indigo-400" />
-              <h1 className="text-xl font-bold">{monthNames[month]} {year}</h1>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={prevMonth} className="p-1.5 hover:bg-slate-700 rounded-lg"><ChevronLeft className="w-4 h-4" /></button>
-              <button onClick={nextMonth} className="p-1.5 hover:bg-slate-700 rounded-lg"><ChevronRight className="w-4 h-4" /></button>
-            </div>
+      <main className="max-w-6xl mx-auto p-4 space-y-4">
+        {/* RINGKASAN KARTU UTAMA */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+            <p className="text-xs uppercase tracking-wider text-gray-500 font-bold">Total Tamu</p>
+            <p className="text-3xl font-extrabold text-gray-900 mt-1">{totalTamu}</p>
           </div>
-
-          <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400 mb-1">
-            {daysOfWeek.map(day => <div key={day} className="py-1">{day}</div>)}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {calendarCells.map((day, idx) => {
-              if (day === null) return <div key={`empty-${idx}`}></div>;
-              
-              const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const dayEvents = events.filter(e => e.date === dateString);
-
-              return (
-                <div 
-                  key={day} 
-                  onClick={() => { setSelectedDate(dateString); setShowModal(true); }}
-                  className="min-h-[55px] p-1 bg-slate-750 border border-slate-700 hover:border-indigo-500 rounded-lg cursor-pointer flex flex-col justify-between"
-                >
-                  <span className="font-bold text-xs text-slate-400">{day}</span>
-                  <div className="flex flex-col gap-0.5">
-                    {dayEvents.slice(0, 1).map(e => (
-                      <span key={e.id} className={`text-[8px] px-1 py-0.5 rounded truncate text-white ${
-                        e.category === 'Kerja' ? 'bg-blue-600' : e.category === 'Pribadi' ? 'bg-emerald-600' : 'bg-purple-600'
-                      }`}>
-                        {e.title}
-                      </span>
-                    ))}
-                    {dayEvents.length > 1 && <span className="text-[7px] text-slate-400 text-center">+{dayEvents.length - 1}</span>}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200">
+            <p className="text-xs uppercase tracking-wider text-emerald-700 font-bold">Total Makanan</p>
+            <p className="text-3xl font-extrabold text-emerald-600 mt-1">{totalMakanan}</p>
           </div>
         </div>
 
-        <div className="bg-slate-800 rounded-2xl p-4 shadow-xl border border-slate-700 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <Clock className="w-4 h-4 text-emerald-400" /> Agenda Kegiatan
-            </h2>
-            <button 
-              onClick={() => { setSelectedDate(new Date().toISOString().split('T')[0]); setShowModal(true); }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg flex items-center gap-1 text-xs font-medium"
+        {/* INPUT FILTER & PENCARIAN */}
+        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-2 items-center">
+          <div className="flex-1 min-w-[200px]">
+            <input 
+              type="text" 
+              placeholder="Cari tamu, mess, atau petugas..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#00875A]"
+            />
+          </div>
+          <div>
+            <select 
+              value={filterMess}
+              onChange={(e) => setFilterMess(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#00875A]"
             >
-              <Plus className="w-3.5 h-3.5" /> Tambah
-            </button>
+              {daftarMessUnik.map((m, idx) => (
+                <option key={idx} value={m}>{m}</option>
+              ))}
+            </select>
           </div>
-
-          <div className="space-y-2 max-h-[300px] overflow-y-auto">
-            {events.length === 0 ? (
-              <p className="text-slate-400 text-center py-6 text-xs">Belum ada agenda kegiatan.</p>
-            ) : (
-              events.map(event => (
-                <div key={event.id} className="p-3 bg-slate-900 rounded-xl border border-slate-700 flex justify-between items-start gap-2">
-                  <div className="overflow-hidden">
-                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                      event.category === 'Kerja' ? 'bg-blue-900/50 text-blue-300' : event.category === 'Pribadi' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-purple-900/50 text-purple-300'
-                    }`}>
-                      {event.category}
-                    </span>
-                    <h3 className="font-semibold text-xs text-slate-100 mt-1 truncate">{event.title}</h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {event.date} • {event.time}
-                    </p>
-                  </div>
-                  <button onClick={() => handleDelete(event.id)} className="text-slate-500 hover:text-red-400 p-0.5 shrink-0">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+          <button className="bg-gray-800 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-gray-700">
+            📤 Ekspor
+          </button>
         </div>
 
-      </div>
+        {/* TABEL JADWAL MAKAN KATERING */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="font-bold text-gray-700">Jadwal Makan Katering</h3>
+            <span className="bg-[#00875A] text-white text-xs font-bold px-2 py-1 rounded">
+              Total Saringan: {totalMakanan}
+            </span>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-gray-100 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
+                  <th className="p-3">Tamu & Foto</th>
+                  <th className="p-3">Tanggal</th>
+                  <th className="p-3 text-center">Pagi (B)</th>
+                  <th className="p-3 text-center">Siang (L)</th>
+                  <th className="p-3 text-center">Malam (D)</th>
+                  <th className="p-3">Mess / Lokasi</th>
+                  <th className="p-3">Petugas</th>
+                  <th className="p-3 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="p-8 text-center text-gray-400">
+                      Belum ada jadwal makan katering terdaftar.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="p-3 font-semibold text-gray-900 flex items-center space-x-2">
+                        <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center text-xs text-gray-500">👤</div>
+                        <span>{item.namaTamu}</span>
+                      </td>
+                      <td className="p-3 text-gray-600">{item.tanggal}</td>
+                      <td className="p-3 text-center">{item.pagi ? <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">{item.pagi}</span> : "-"}</td>
+                      <td className="p-3 text-center">{item.siang ? <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-bold">{item.siang}</span> : "-"}</td>
+                      <td className="p-3 text-center">{item.malam ? <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold">{item.malam}</span> : "-"}</td>
+                      <td className="p-3 text-gray-600">{item.mess || "-"}</td>
+                      <td className="p-3"><span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full text-xs">{item.petugas}</span></td>
+                      <td className="p-3 text-center">
+                        <button 
+                          onClick={() => handleHapusData(item.id)}
+                          className="text-red-500 hover:text-red-700 font-bold"
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
 
+      {/* POPUP MODAL INPUT MANUAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-5 relative shadow-2xl">
-            <h3 className="text-md font-bold mb-3 flex items-center gap-2 text-indigo-400">
-              <Tag className="w-4 h-4" /> Tambah Agenda
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
+            <div className="bg-[#00875A] text-white p-4 font-bold flex justify-between items-center">
+              <span>Tambah Jadwal Katering</span>
+              <button onClick={() => setShowModal(false)} className="text-xl">&times;</button>
+            </div>
+            <form onSubmit={handleSimpanData} className="p-4 space-y-3">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Nama Kegiatan</label>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Contoh: Meeting" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none" required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Tanggal</label>
-                  <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-100 focus:outline-none" required />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Jam</label>
-                  <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-100 focus:outline-none" />
-                </div>
+                <label className="block text-xs font-bold text-gray-600 uppercase">Nama Tamu / Rombongan</label>
+                <input type="text" required placeholder="Contoh: Instruktur Safindo Raya" value={namaTamu} onChange={(e) => setNamaTamu(e.target.value)} className="w-full border p-2 text-sm rounded mt-1"/>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Kategori</label>
-                <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 focus:outline-none">
-                  <option value="Kerja">Kerja 🔵</option>
-                  <option value="Pribadi">Pribadi 🟢</option>
-                  <option value="Penting">Penting 🟣</option>
-                </select>
+                <label className="block text-xs font-bold text-gray-600 uppercase">Tanggal</label>
+                <input type="text" required placeholder="Contoh: Rab, 17 Jun 2026" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="w-full border p-2 text-sm rounded mt-1"/>
               </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setShowModal(false)} className="px-3 py-1.5 rounded-lg bg-slate-700 text-[11px] font-medium">Batal</button>
-                <button type="submit" className="px-3 py-1.5 rounded-lg bg-indigo-600 text-[11px] font-medium text-white">Simpan</button>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase">Pagi (B)</label>
+                  <input type="number" placeholder="0" value={pagi} onChange={(e) => setPagi(e.target.value)} className="w-full border p-2 text-sm rounded mt-1 text-center"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase">Siang (L)</label>
+                  <input type="number" placeholder="0" value={siang} onChange={(e) => setSiang(e.target.value)} className="w-full border p-2 text-sm rounded mt-1 text-center"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase">Malam (D)</label>
+                  <input type="number" placeholder="0" value={malam} onChange={(e) => setMalam(e.target.value)} className="w-full border p-2 text-sm rounded mt-1 text-center"/>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase">Mess / Lokasi</label>
+                <input type="text" placeholder="Contoh: B12-2 atau E3" value={mess} onChange={(e) => setMess(e.target.value)} className="w-full border p-2 text-sm rounded mt-1"/>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase">Petugas</label>
+                <input type="text" value={petugas} onChange={(e) => setPetugas(e.target.value)} className="w-full border p-2 text-sm rounded mt-1 bg-gray-50"/>
+              </div>
+              <div className="flex space-x-2 pt-2 justify-end">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded text-sm text-gray-600 hover:bg-gray-100">Batal</button>
+                <button type="submit" className="px-4 py-2 bg-[#00875A] text-white rounded text-sm font-bold hover:bg-green-700">Simpan Data</button>
               </div>
             </form>
           </div>
@@ -215,3 +273,5 @@ export default function App() {
     </div>
   );
 }
+
+export default App;
